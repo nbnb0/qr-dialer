@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
+    - name: Checkout code
       uses: actions/checkout@v4
 
     - name: Set up JDK 17
@@ -18,39 +18,204 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Setup Project
+    - name: Setup Gradle 8.4
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '8.4'
+
+    - name: Create Android Project Structure
       run: |
         mkdir -p app/src/main/java/com/example/qrdialer
         mkdir -p app/src/main/res/layout
 
-        echo "include(':app')" > settings.gradle.kts
-        
-        echo 'plugins { id("com.android.application") version "8.1.4" apply false; id("org.jetbrains.kotlin.android") version "1.9.20" apply false }' > build.gradle.kts
-        
-        echo 'plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
-        android { namespace = "com.example.qrdialer"; compileSdk = 34
-        defaultConfig { applicationId = "com.example.qrdialer"; minSdk = 24; targetSdk = 34; versionCode = 1; versionName = "1.0" } }
-        dependencies { implementation("androidx.core:core-ktx:1.12.0"); implementation("androidx.appcompat:appcompat:1.6.1"); implementation("com.google.android.material:material:1.11.0"); implementation("com.journeyapps:zxing-android-embedded:4.3.0") }' > app/build.gradle.kts
+        # 1. settings.gradle.kts
+        cat << 'EOF' > settings.gradle.kts
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+        dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        rootProject.name = "QrTelephone"
+        include(":app")
+        EOF
 
-        # Манифест
-        echo '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="QR Telephone" android:theme="@style/Theme.Material3.DayNight.NoActionBar"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:category="android.intent.category.LAUNCHER" /></intent-filter><intent-filter><action android:name="android.intent.action.DIAL" /><category android:category="android.intent.category.DEFAULT" /></intent-filter><intent-filter><action android:name="android.intent.action.VIEW" /><category android:category="android.intent.category.DEFAULT" /><category android:category="android.intent.category.BROWSABLE" /><data android:scheme="tel" /></intent-filter></activity></application></manifest>' > app/src/main/AndroidManifest.xml
+        # 2. build.gradle.kts
+        cat << 'EOF' > build.gradle.kts
+        plugins {
+            id("com.android.application") version "8.1.4" apply false
+            id("org.jetbrains.kotlin.android") version "1.9.20" apply false
+        }
+        EOF
 
-        # Layout
-        echo '<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical"><TextView android:id="@+id/numberTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Номер" android:textSize="26sp" /><ImageView android:id="@+id/qrImageView" android:layout_width="300dp" android:layout_height="300dp" /></LinearLayout>' > app/src/main/res/layout/activity_main.xml
+        # 3. app/build.gradle.kts
+        cat << 'EOF' > app/build.gradle.kts
+        plugins {
+            id("com.android.application")
+            id("org.jetbrains.kotlin.android")
+        }
 
-        # MainActivity
-        echo 'package com.example.qrdialer
-        import android.os.Bundle; import android.widget.ImageView; import android.widget.TextView; import androidx.appcompat.app.AppCompatActivity; import com.google.zxing.BarcodeFormat; import com.journeyapps.barcodescanner.BarcodeEncoder
-        class MainActivity : AppCompatActivity() { override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContentView(R.layout.activity_main); val num = intent?.data?.schemeSpecificPart?.replace(Regex("[^0-9]"), "") ?: ""; findViewById<TextView>(R.id.numberTextView).text = num; findViewById<ImageView>(R.id.qrImageView).setImageBitmap(BarcodeEncoder().encodeBitmap(num, BarcodeFormat.QR_CODE, 600, 600)) } }' > app/src/main/java/com/example/qrdialer/MainActivity.kt
+        android {
+            namespace = "com.example.qrdialer"
+            compileSdk = 34
 
-    - name: Build
-      run: |
-        chmod +x gradlew || true
-        ./gradlew assembleDebug --no-daemon
+            defaultConfig {
+                applicationId = "com.example.qrdialer"
+                minSdk = 24
+                targetSdk = 34
+                versionCode = 1
+                versionName = "1.0"
+            }
 
-    - name: Upload
+            compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_17
+                targetCompatibility = JavaVersion.VERSION_17
+            }
+            kotlinOptions {
+                jvmTarget = "17"
+            }
+        }
+
+        dependencies {
+            implementation("androidx.core:core-ktx:1.12.0")
+            implementation("androidx.appcompat:appcompat:1.6.1")
+            implementation("com.google.android.material:material:1.11.0")
+            implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+        }
+        EOF
+
+        # 4. AndroidManifest.xml
+        cat << 'EOF' > app/src/main/AndroidManifest.xml
+        <?xml version="1.0" encoding="utf-8"?>
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <application 
+                android:label="QR Telephone" 
+                android:supportsRtl="true"
+                android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+
+                <activity 
+                    android:name=".MainActivity" 
+                    android:exported="true"
+                    android:label="QR Telephone">
+
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN" />
+                        <category android:category="android.intent.category.LAUNCHER" />
+                    </intent-filter>
+
+                    <intent-filter>
+                        <action android:name="android.intent.action.DIAL" />
+                        <category android:category="android.intent.category.DEFAULT" />
+                    </intent-filter>
+                    
+                    <intent-filter>
+                        <action android:name="android.intent.action.VIEW" />
+                        <category android:category="android.intent.category.DEFAULT" />
+                        <category android:category="android.intent.category.BROWSABLE" />
+                        <data android:scheme="tel" />
+                    </intent-filter>
+                </activity>
+            </application>
+        </manifest>
+        EOF
+
+        # 5. activity_main.xml
+        cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+        <?xml version="1.0" encoding="utf-8"?>
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+            android:layout_width="match_parent" 
+            android:layout_height="match_parent"
+            android:gravity="center" 
+            android:orientation="vertical" 
+            android:padding="24dp">
+
+            <TextView 
+                android:id="@+id/numberTextView" 
+                android:layout_width="wrap_content" 
+                android:layout_height="wrap_content"
+                android:text="Номер" 
+                android:textSize="26sp" 
+                android:textStyle="bold" 
+                android:textColor="#000000"
+                android:layout_marginBottom="24dp" />
+
+            <ImageView 
+                android:id="@+id/qrImageView" 
+                android:layout_width="320dp" 
+                android:layout_height="320dp" />
+        </LinearLayout>
+        EOF
+
+        # 6. MainActivity.kt
+        cat << 'EOF' > app/src/main/java/com/example/qrdialer/MainActivity.kt
+        package com.example.qrdialer
+
+        import android.graphics.Bitmap
+        import android.net.Uri
+        import android.os.Bundle
+        import android.widget.ImageView
+        import android.widget.TextView
+        import androidx.appcompat.app.AppCompatActivity
+        import com.google.zxing.BarcodeFormat
+        import com.journeyapps.barcodescanner.BarcodeEncoder
+        import java.net.URLDecoder
+
+        class MainActivity : AppCompatActivity() {
+
+            override fun onCreate(savedInstanceState: Bundle?) {
+                super.onCreate(savedInstanceState)
+                setContentView(R.layout.activity_main)
+
+                val qrImageView = findViewById<ImageView>(R.id.qrImageView)
+                val numberTextView = findViewById<TextView>(R.id.numberTextView)
+
+                var rawInput = ""
+
+                val data: Uri? = intent?.data
+                if (data != null) {
+                    rawInput = data.schemeSpecificPart ?: ""
+                }
+
+                if (rawInput.isNotEmpty()) {
+                    rawInput = URLDecoder.decode(rawInput, "UTF-8")
+                }
+
+                val cleanDigitsOnly = rawInput.replace(Regex("[^0-9]"), "")
+
+                if (cleanDigitsOnly.isNotEmpty()) {
+                    numberTextView.text = cleanDigitsOnly
+                    generateQrCode(cleanDigitsOnly, qrImageView)
+                } else {
+                    numberTextView.text = "Номер не найден"
+                }
+            }
+
+            private fun generateQrCode(text: String, imageView: ImageView) {
+                try {
+                    val barcodeEncoder = BarcodeEncoder()
+                    val bitmap: Bitmap = barcodeEncoder.encodeBitmap(text, BarcodeFormat.QR_CODE, 700, 700)
+                    imageView.setImageBitmap(bitmap)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+        EOF
+
+    - name: Build APK with Gradle
+      run: gradle assembleDebug --stacktrace
+
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: app
+        name: qr-telephone-apk
         path: app/build/outputs/apk/debug/app-debug.apk
         
